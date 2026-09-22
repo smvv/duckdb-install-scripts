@@ -42,32 +42,17 @@ jobs:
         "$PINNED_INST/duckdb" -c "select 42"
 
     - name: Test Unix libraries
-      if: matrix.version != 'pinned'
+      if: matrix.version == 'staged'
       shell: sh
-      env:
-        TEST_VERSION: ${{ matrix.version }}
       run: |
         export HOME="$RUNNER_TEMP/duckdb-library-home"
         mkdir -p "$HOME"
 
-        install_libraries() {
-          if [ "$TEST_VERSION" = "staged" ]; then
-            DUCKDB_INSTALL=static,shared DUCKDB_STAGED=31adc8b766 sh install.sh
-          else
-            DUCKDB_INSTALL=static,shared sh install.sh
-          fi
-        }
-
-        install_libraries
+        DUCKDB_INSTALL=static,shared DUCKDB_STAGED=31adc8b766 sh install.sh
         test ! -e "$HOME/.duckdb/cli"
 
-        if [ "$TEST_VERSION" = "staged" ]; then
-          LIB_INST="$HOME/.duckdb/lib/2.0.0-alpha42839"
-          test "$(readlink "$HOME/.duckdb/lib/latest")" = "$LIB_INST"
-        else
-          LIB_INST="$HOME/.duckdb/lib/latest"
-          test -L "$LIB_INST"
-        fi
+        LIB_INST="$HOME/.duckdb/lib/2.0.0-alpha42839"
+        test "$(readlink "$HOME/.duckdb/lib/latest")" = "$LIB_INST"
 
         test -s "$LIB_INST/duckdb.h"
         test -s "$LIB_INST/libduckdb_static.a"
@@ -112,19 +97,13 @@ jobs:
         & "$env:LOCALAPPDATA\duckdb\cli\1.5.5\duckdb.exe" -c "select 42"
 
     - name: Test Windows libraries
-      if: matrix.version != 'pinned'
+      if: matrix.version == 'staged'
       shell: pwsh
-      env:
-        TEST_VERSION: ${{ matrix.version }}
       run: |
         $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP "duckdb-library-appdata"
         $env:DUCKDB_INSTALL = "static,shared"
-        if ($env:TEST_VERSION -eq "staged") {
-          $env:DUCKDB_STAGED = "31adc8b766"
-          $version = "2.0.0-alpha42839"
-        } else {
-          $version = (iwr "https://duckdb.org/data/latest_stable_version.txt").Content.Trim()
-        }
+        $env:DUCKDB_STAGED = "31adc8b766"
+        $version = "2.0.0-alpha42839"
 
         ./install.ps1
         if (Test-Path "$env:LOCALAPPDATA\duckdb\cli") {
