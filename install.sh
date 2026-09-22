@@ -70,8 +70,19 @@ main () {
     LATEST_VER=
     if [ -n "${DUCKDB_STAGED}" ]
     then
-        VER="${DUCKDB_STAGED#*/}"
         STAGED_COMMIT=$(printf '%.10s' "${DUCKDB_STAGED%%/*}")
+        case "${DUCKDB_STAGED}" in
+            */*)
+                VER="${DUCKDB_STAGED#*/}"
+                ;;
+            *)
+                if ! VER=$(curl --fail --silent --show-error "https://duckdb-staging.duckdb.org/${STAGED_COMMIT}/latest_alpha_version.txt")
+                then
+                    echo "Failed to determine the DuckDB alpha version for staged commit ${STAGED_COMMIT}." 1>&2
+                    exit 1
+                fi
+                ;;
+        esac
         DUCKDB_STAGED="${STAGED_COMMIT}/${VER}"
     else
         LATEST_VER=$(curl --fail --silent --show-error https://duckdb.org/data/latest_stable_version.txt)

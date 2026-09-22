@@ -2,19 +2,27 @@
 
 This repository contains the scripts that power the DuckDB installer.
 
-To install the latest stable duckdb CLI, use:
+Install the latest stable duckdb CLI:
 ```shell
 curl install.duckdb.org | sh
 ```
 
-Install the latest alpha version with:
+Install the latest alpha version:
 ```shell
 curl https://install.duckdb.org | DUCKDB_VERSION=alpha sh
 ```
 
-Or a specific staged version with:
+Install staged artifacts for a specific commit:
 ```shell
-curl https://install.duckdb.org | DUCKDB_STAGED=c99ade5cb6/v2.0.0-alpha38367 sh
+curl https://install.duckdb.org | DUCKDB_STAGED=31adc8b766 sh
+```
+
+> [!NOTE]
+> The installer looks up the latest alpha version associated with that commit.
+
+Or, install an explicit `commit/version` pair:
+```shell
+curl https://install.duckdb.org | DUCKDB_STAGED=31adc8b766/v2.0.0-alpha42839 sh
 ```
 
 ## Components
@@ -82,6 +90,8 @@ int main() {
 }
 ```
 
+### Linking on Linux and macOS
+
 Link the shared library on Linux or macOS with:
 
 ```bash
@@ -98,18 +108,23 @@ c++ main.cpp -I"$DUCKDB_PREFIX" "$DUCKDB_PREFIX/libduckdb_static.a" \
     -pthread -o example
 ```
 
-On Linux, a static build may additionally need `-ldl`, depending on the release build. On Windows with MSVC, use `duckdb.lib` for the shared library or `duckdb_static.lib` for the static library:
+On Linux, a static build may additionally need `-ldl`, depending on the release build.
+
+### Linking on Windows
+
+On Windows with MSVC, use `duckdb.lib` for the shared library or `duckdb_static.lib` for the static library:
 
 ```powershell
 $DuckDBPrefix = "$env:LOCALAPPDATA\duckdb\lib\<version>"
 cl /EHsc main.cpp /I "$DuckDBPrefix" /link "/LIBPATH:$DuckDBPrefix" duckdb.lib
 ```
 
-When linking the shared library on Windows, place `duckdb.dll` beside the resulting executable or add its directory to `PATH`.
+> [!NOTE]
+> When linking the shared library on Windows, place `duckdb.dll` beside the resulting executable or add its directory to `PATH`.
 
 ## Alpine Linux
 
-The Linux installer detects musl libc and downloads the matching DuckDB CLI build. On Alpine Linux, install the required tools and C++ runtime before running the installer:
+On Alpine Linux, install curl and C++ runtime before running the installer:
 
 ```bash
 apk add --no-cache curl libstdc++

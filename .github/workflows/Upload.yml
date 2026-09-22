@@ -18,8 +18,8 @@ jobs:
       if: matrix.version == 'staged'
       shell: sh
       run: |
-        DUCKDB_STAGED=c99ade5cb6/v2.0.0-alpha38367 sh install.sh
-        ALPHA_INST="$HOME/.duckdb/cli/2.0.0-alpha38367"
+        DUCKDB_STAGED=31adc8b766/v2.0.0-alpha42839 sh install.sh
+        ALPHA_INST="$HOME/.duckdb/cli/2.0.0-alpha42839"
         test -x "$ALPHA_INST/duckdb"
         test "$(readlink ~/.duckdb/cli/latest)" = "$ALPHA_INST"
         ~/.duckdb/cli/latest/duckdb -c "select 42"
@@ -52,7 +52,7 @@ jobs:
 
         install_libraries() {
           if [ "$TEST_VERSION" = "staged" ]; then
-            DUCKDB_INSTALL=static,shared DUCKDB_STAGED=c99ade5cb6/v2.0.0-alpha38367 sh install.sh
+            DUCKDB_INSTALL=static,shared DUCKDB_STAGED=31adc8b766 sh install.sh
           else
             DUCKDB_INSTALL=static,shared sh install.sh
           fi
@@ -62,7 +62,7 @@ jobs:
         test ! -e "$HOME/.duckdb/cli"
 
         if [ "$TEST_VERSION" = "staged" ]; then
-          LIB_INST="$HOME/.duckdb/lib/2.0.0-alpha38367"
+          LIB_INST="$HOME/.duckdb/lib/2.0.0-alpha42839"
           test "$(readlink "$HOME/.duckdb/lib/latest")" = "$LIB_INST"
         else
           LIB_INST="$HOME/.duckdb/lib/latest"
@@ -99,9 +99,9 @@ jobs:
       if: matrix.version == 'staged'
       shell: pwsh
       run: |
-        $env:DUCKDB_STAGED = "c99ade5cb6/v2.0.0-alpha38367"
+        $env:DUCKDB_STAGED = "31adc8b766"
         ./install.ps1
-        & "$env:LOCALAPPDATA\duckdb\cli\2.0.0-alpha38367\duckdb.exe" -c "select 42"
+        & "$env:LOCALAPPDATA\duckdb\cli\2.0.0-alpha42839\duckdb.exe" -c "select 42"
 
     - name: Test pinned Windows install
       if: matrix.version == 'pinned'
@@ -120,8 +120,8 @@ jobs:
         $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP "duckdb-library-appdata"
         $env:DUCKDB_INSTALL = "static,shared"
         if ($env:TEST_VERSION -eq "staged") {
-          $env:DUCKDB_STAGED = "c99ade5cb6/v2.0.0-alpha38367"
-          $version = "2.0.0-alpha38367"
+          $env:DUCKDB_STAGED = "31adc8b766"
+          $version = "2.0.0-alpha42839"
         } else {
           $version = (iwr "https://duckdb.org/data/latest_stable_version.txt").Content.Trim()
         }
@@ -156,8 +156,8 @@ jobs:
         TEST_VERSION: ${{ matrix.version }}
       run: |
         if [ "$TEST_VERSION" = "staged" ]; then
-          DUCKDB_STAGED=c99ade5cb6/v2.0.0-alpha38367 sh install.sh
-          test -x "$HOME/.duckdb/cli/2.0.0-alpha38367/duckdb"
+          DUCKDB_STAGED=31adc8b766 sh install.sh
+          test -x "$HOME/.duckdb/cli/2.0.0-alpha42839/duckdb"
           "$HOME/.duckdb/cli/latest/duckdb" -c "select 42"
         elif [ "$TEST_VERSION" = "pinned" ]; then
           DUCKDB_VERSION=1.5.5 sh install.sh
@@ -192,8 +192,8 @@ jobs:
         fi
 
         if [ "$TEST_VERSION" = "staged" ]; then
-          DUCKDB_STAGED=c99ade5cb6/v2.0.0-alpha38367 sh install.sh
-          test -x "$HOME/.duckdb/cli/2.0.0-alpha38367/duckdb"
+          DUCKDB_STAGED=31adc8b766 sh install.sh
+          test -x "$HOME/.duckdb/cli/2.0.0-alpha42839/duckdb"
           "$HOME/.duckdb/cli/latest/duckdb" -c "select 42"
         elif [ "$TEST_VERSION" = "pinned" ]; then
           DUCKDB_VERSION=1.5.5 sh install.sh

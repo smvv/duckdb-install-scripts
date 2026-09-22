@@ -34,7 +34,11 @@ if ($duckdb_staged) {
     if ($staged_commit.Length -gt 10) {
         $staged_commit = $staged_commit.Substring(0, 10)
     }
-    $duckdb_version = $staged_parts[1]
+    if ($duckdb_staged.Contains('/')) {
+        $duckdb_version = $staged_parts[1]
+    } else {
+        $duckdb_version = (iwr "https://duckdb-staging.duckdb.org/${staged_commit}/latest_alpha_version.txt").Content.Trim()
+    }
     $duckdb_staged = "${staged_commit}/${duckdb_version}"
 } elseif ($requested_version) {
     $duckdb_version = $requested_version
