@@ -35,7 +35,7 @@ jobs:
       if: matrix.version == 'pinned'
       shell: sh
       run: |
-        DUCKDB_VERSION=1.5.5 sh install.sh
+        DUCKDB_VERSION=v1.5.5 sh install.sh
         PINNED_INST="$HOME/.duckdb/cli/1.5.5"
         test -x "$PINNED_INST/duckdb"
         test "$("$PINNED_INST/duckdb" -noheader -init /dev/null -csv -batch -s "SELECT version()")" = "v1.5.5"
@@ -92,7 +92,7 @@ jobs:
       if: matrix.version == 'pinned'
       shell: pwsh
       run: |
-        $env:DUCKDB_VERSION = "1.5.5"
+        $env:DUCKDB_VERSION = "v1.5.5"
         ./install.ps1
         & "$env:LOCALAPPDATA\duckdb\cli\1.5.5\duckdb.exe" -c "select 42"
 

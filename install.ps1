@@ -46,6 +46,14 @@ if ($duckdb_staged) {
     $duckdb_version = (iwr "https://duckdb.org/data/latest_stable_version.txt").Content.Trim()
 }
 
+if (-not $duckdb_staged -and $duckdb_version.StartsWith("v")) {
+    $duckdb_version = $duckdb_version.Substring(1)
+}
+
+if (($install_static -or $install_shared) -and ($duckdb_version -like "1*" -or $duckdb_version -like "v1*")) {
+    throw "static/shared libraries require DuckDB >= 2.0"
+}
+
 $expected_duckdb_version = $duckdb_version
 if (-not $expected_duckdb_version.StartsWith("v")) {
     $expected_duckdb_version = "v${expected_duckdb_version}"
@@ -162,7 +170,22 @@ function GetLibraryUrl {
     return "https://install.duckdb.org/v${duckdb_version}/duckdb-${Component}-libs-${duckdb_arch}.tar.gz"
 }
 
-function InstallLibrary {
+function TestLibraryInstalled {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]
+        $RequiredFiles
+    )
+
+    foreach ($required_file in $RequiredFiles) {
+        if (-not (TestNonEmptyFile (Join-Path $library_install_dir -ChildPath $required_file))) {
+            return $false
+        }
+    }
+    return $true
+}
+
+function ExtractLibrary {
     param(
         [Parameter(Mandatory = $true)]
         [string]
@@ -174,48 +197,105 @@ function InstallLibrary {
 
         [Parameter(Mandatory = $true)]
         [string]
+        $DestinationPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]
         $TempRoot
     )
 
-    $already_installed = $true
-    foreach ($required_file in $RequiredFiles) {
-        if (-not (TestNonEmptyFile (Join-Path $library_install_dir -ChildPath $required_file))) {
-            $already_installed = $false
-            break
-        }
-    }
-    if ($already_installed) {
-        Write-Host "DuckDB ${Component} library already exists in ${library_install_dir}"
-        return
-    }
-
-    $component_temp = Join-Path $TempRoot -ChildPath $Component
-    $null = New-Item -Path $component_temp -ItemType Directory -Force
     $archive_file = Join-Path $TempRoot -ChildPath "duckdb-${Component}-libs.tar.gz"
     $download_url = GetLibraryUrl $Component
     Invoke-WebRequest $download_url -OutFile $archive_file
-    tar.exe -xzf $archive_file -C $component_temp
+    tar.exe -xzf $archive_file -C $DestinationPath
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to unpack DuckDB ${Component} library"
     }
 
     foreach ($required_file in $RequiredFiles) {
-        $candidate = Join-Path $component_temp -ChildPath $required_file
+        $candidate = Join-Path $DestinationPath -ChildPath $required_file
         if (-not (TestNonEmptyFile $candidate)) {
             throw "The ${Component} library archive did not contain ${required_file}."
         }
     }
+}
 
-    $null = New-Item -Path $library_install_dir -ItemType Directory -Force
-    Get-ChildItem -LiteralPath $component_temp -Force | Copy-Item -Destination $library_install_dir -Recurse -Force
+function InstallLibraries {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]
+        $TempRoot
+    )
 
-    foreach ($required_file in $RequiredFiles) {
-        $installed_file = Join-Path $library_install_dir -ChildPath $required_file
-        if (-not (TestNonEmptyFile $installed_file)) {
-            throw "Failed to install ${Component} library file ${installed_file}."
+    $static_files = @("duckdb.h", "duckdb_static.lib")
+    $shared_files = @("duckdb.h", "duckdb.dll", "duckdb.lib")
+    $need_static = $install_static -and -not (TestLibraryInstalled $static_files)
+    $need_shared = $install_shared -and -not (TestLibraryInstalled $shared_files)
+
+    if ($install_static -and -not $need_static) {
+        Write-Host "DuckDB static library already exists in ${library_install_dir}"
+    }
+    if ($install_shared -and -not $need_shared) {
+        Write-Host "DuckDB shared library already exists in ${library_install_dir}"
+    }
+    if (-not $need_static -and -not $need_shared) {
+        return
+    }
+
+    $null = New-Item -Path $library_path -ItemType Directory -Force
+    $library_random = [System.IO.Path]::GetRandomFileName()
+    $library_stage = Join-Path $library_path -ChildPath ".${path_version}.${library_random}.tmp"
+    $library_backup = Join-Path $library_path -ChildPath ".${path_version}.${library_random}.previous"
+
+    try {
+        $null = New-Item -Path $library_stage -ItemType Directory
+        if (Test-Path $library_install_dir -PathType Container) {
+            Get-ChildItem -LiteralPath $library_install_dir -Force | Copy-Item -Destination $library_stage -Recurse -Force
+        } elseif (Test-Path $library_install_dir) {
+            throw "Library install destination ${library_install_dir} exists and is not a directory."
+        }
+
+        if ($need_static) {
+            ExtractLibrary "static" $static_files $library_stage $TempRoot
+        }
+        if ($need_shared) {
+            ExtractLibrary "shared" $shared_files $library_stage $TempRoot
+        }
+
+        if (Test-Path $library_install_dir -PathType Container) {
+            Move-Item -LiteralPath $library_install_dir -Destination $library_backup
+        }
+        try {
+            Move-Item -LiteralPath $library_stage -Destination $library_install_dir
+        } catch {
+            if ((Test-Path $library_backup -PathType Container) -and -not (Test-Path $library_install_dir)) {
+                Move-Item -LiteralPath $library_backup -Destination $library_install_dir
+            }
+            throw
+        }
+
+        if (Test-Path $library_backup -PathType Container) {
+            Remove-Item -LiteralPath $library_backup -Recurse -Force
+        }
+
+        if ($need_static) {
+            Write-Host "Successfully installed DuckDB static library to ${library_install_dir}"
+        }
+        if ($need_shared) {
+            Write-Host "Successfully installed DuckDB shared library to ${library_install_dir}"
+        }
+    } finally {
+        if (Test-Path $library_stage -PathType Container) {
+            Remove-Item -LiteralPath $library_stage -Recurse -Force
+        }
+        if (Test-Path $library_backup -PathType Container) {
+            if (-not (Test-Path $library_install_dir)) {
+                Move-Item -LiteralPath $library_backup -Destination $library_install_dir
+            } else {
+                Remove-Item -LiteralPath $library_backup -Recurse -Force
+            }
         }
     }
-    Write-Host "Successfully installed DuckDB ${Component} library to ${library_install_dir}"
 }
 
 if (-not $env:TEMP) {
@@ -257,12 +337,8 @@ try {
         }
     }
 
-    foreach ($component in $install_components) {
-        if ($component -ceq "static") {
-            InstallLibrary "static" @("duckdb.h", "duckdb_static.lib") $temp_dir
-        } elseif ($component -ceq "shared") {
-            InstallLibrary "shared" @("duckdb.h", "duckdb.dll", "duckdb.lib") $temp_dir
-        }
+    if ($install_static -or $install_shared) {
+        InstallLibraries $temp_dir
     }
 } finally {
     if (Test-Path $temp_dir -PathType Container) {

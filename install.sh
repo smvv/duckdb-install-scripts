@@ -86,6 +86,7 @@ main () {
         DUCKDB_STAGED="${STAGED_COMMIT}/${VER}"
     else
         LATEST_VER=$(curl --fail --silent --show-error https://duckdb.org/data/latest_stable_version.txt)
+        LATEST_VER=${LATEST_VER#v}
 
         # Figure out the latest version or use the one from the environment.
         if [ -z "${DUCKDB_VERSION:-}" ]
@@ -94,6 +95,16 @@ main () {
         else
             VER="$DUCKDB_VERSION"
         fi
+        VER=${VER#v}
+    fi
+
+    if [ "${WANT_STATIC}" = true ] || [ "${WANT_SHARED}" = true ]; then
+        case "${VER}" in
+            1*|v1*)
+                echo "static/shared libraries require DuckDB >= 2.0" 1>&2
+                exit 1
+                ;;
+        esac
     fi
 
     PATH_VER=${VER#v}
@@ -150,6 +161,9 @@ main () {
 
     TEMP_DIR=
     cleanup() {
+        if [ -n "${LIBRARY_BACKUP:-}" ] && [ -d "${LIBRARY_BACKUP}" ] && [ ! -e "${LIB_INST}" ]; then
+            mv "${LIBRARY_BACKUP}" "${LIB_INST}" || true
+        fi
         if [ -n "${TEMP_DIR}" ] && [ -d "${TEMP_DIR}" ]; then
             rm -rf "${TEMP_DIR}"
         fi
@@ -159,7 +173,8 @@ main () {
 
     make_temp_dir() {
         if [ -z "${TEMP_DIR}" ]; then
-            TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/duckdb_install.XXXXXX") || exit 1
+            mkdir -p "${LIB_PREFIX}" || exit 1
+            TEMP_DIR=$(mktemp -d "${LIB_PREFIX}/.duckdb_install.XXXXXX") || exit 1
         fi
     }
 
@@ -226,33 +241,81 @@ main () {
         echo "Successfully installed DuckDB ${VER} to ${CLI_INST}/duckdb"
     }
 
-    install_library() {
+    extract_library() {
         LIBRARY_COMPONENT=$1
         EXPECTED_LIBRARY=$2
+        LIBRARY_STAGE=$3
+        URL=$(library_url "${LIBRARY_COMPONENT}")
+        curl --fail --location --progress-bar "${URL}" | tar -C "${LIBRARY_STAGE}" -xzf - || exit 1
 
-        if [ -s "${LIB_INST}/${EXPECTED_LIBRARY}" ] && [ -s "${LIB_INST}/duckdb.h" ]; then
-            echo "DuckDB ${LIBRARY_COMPONENT} library already exists at ${LIB_INST}/${EXPECTED_LIBRARY}"
+        if [ ! -s "${LIBRARY_STAGE}/duckdb.h" ] || [ ! -s "${LIBRARY_STAGE}/${EXPECTED_LIBRARY}" ]; then
+            echo "The ${LIBRARY_COMPONENT} library archive did not contain duckdb.h and ${EXPECTED_LIBRARY}." 1>&2
+            exit 1
+        fi
+    }
+
+    install_libraries() {
+        NEED_STATIC=false
+        NEED_SHARED=false
+
+        if [ "${WANT_STATIC}" = true ]; then
+            if [ -s "${LIB_INST}/${STATIC_LIBRARY}" ] && [ -s "${LIB_INST}/duckdb.h" ]; then
+                echo "DuckDB static library already exists at ${LIB_INST}/${STATIC_LIBRARY}"
+            else
+                NEED_STATIC=true
+            fi
+        fi
+        if [ "${WANT_SHARED}" = true ]; then
+            if [ -s "${LIB_INST}/${SHARED_LIBRARY}" ] && [ -s "${LIB_INST}/duckdb.h" ]; then
+                echo "DuckDB shared library already exists at ${LIB_INST}/${SHARED_LIBRARY}"
+            else
+                NEED_SHARED=true
+            fi
+        fi
+
+        if [ "${NEED_STATIC}" = false ] && [ "${NEED_SHARED}" = false ]; then
             return
         fi
 
         make_temp_dir
-        COMPONENT_TEMP="${TEMP_DIR}/${LIBRARY_COMPONENT}"
-        mkdir -p "${COMPONENT_TEMP}"
-        URL=$(library_url "${LIBRARY_COMPONENT}")
-        curl --fail --location --progress-bar "${URL}" | tar -C "${COMPONENT_TEMP}" -xzf - || exit 1
+        LIBRARY_STAGE="${TEMP_DIR}/lib"
+        LIBRARY_BACKUP="${TEMP_DIR}/previous"
+        mkdir -p "${LIBRARY_STAGE}" || exit 1
 
-        if [ ! -s "${COMPONENT_TEMP}/duckdb.h" ] || [ ! -s "${COMPONENT_TEMP}/${EXPECTED_LIBRARY}" ]; then
-            echo "The ${LIBRARY_COMPONENT} library archive did not contain duckdb.h and ${EXPECTED_LIBRARY}." 1>&2
+        if [ -d "${LIB_INST}" ]; then
+            cp -R "${LIB_INST}/." "${LIBRARY_STAGE}/" || exit 1
+        elif [ -e "${LIB_INST}" ]; then
+            echo "Library install destination ${LIB_INST} exists and is not a directory." 1>&2
             exit 1
         fi
 
-        mkdir -p "${LIB_INST}"
-        cp -R "${COMPONENT_TEMP}/." "${LIB_INST}/" || exit 1
-        if [ ! -s "${LIB_INST}/${EXPECTED_LIBRARY}" ]; then
-            echo "Failed to install ${LIBRARY_COMPONENT} library at ${LIB_INST}/${EXPECTED_LIBRARY}." 1>&2
+        if [ "${NEED_STATIC}" = true ]; then
+            extract_library static "${STATIC_LIBRARY}" "${LIBRARY_STAGE}"
+        fi
+        if [ "${NEED_SHARED}" = true ]; then
+            extract_library shared "${SHARED_LIBRARY}" "${LIBRARY_STAGE}"
+        fi
+
+        if [ -d "${LIB_INST}" ]; then
+            mv "${LIB_INST}" "${LIBRARY_BACKUP}" || exit 1
+        fi
+        if ! mv "${LIBRARY_STAGE}" "${LIB_INST}"; then
+            if [ -d "${LIBRARY_BACKUP}" ]; then
+                mv "${LIBRARY_BACKUP}" "${LIB_INST}" || true
+            fi
+            echo "Failed to install DuckDB libraries to ${LIB_INST}." 1>&2
             exit 1
         fi
-        echo "Successfully installed DuckDB ${LIBRARY_COMPONENT} library to ${LIB_INST}/${EXPECTED_LIBRARY}"
+        if [ -d "${LIBRARY_BACKUP}" ]; then
+            rm -rf "${LIBRARY_BACKUP}"
+        fi
+
+        if [ "${NEED_STATIC}" = true ]; then
+            echo "Successfully installed DuckDB static library to ${LIB_INST}/${STATIC_LIBRARY}"
+        fi
+        if [ "${NEED_SHARED}" = true ]; then
+            echo "Successfully installed DuckDB shared library to ${LIB_INST}/${SHARED_LIBRARY}"
+        fi
     }
 
     echo
@@ -295,27 +358,9 @@ main () {
         fi
     fi
 
-    REMAINING_COMPONENTS=${INSTALL_COMPONENTS}
-    while [ -n "${REMAINING_COMPONENTS}" ]
-    do
-        case "${REMAINING_COMPONENTS}" in
-            *,*)
-                COMPONENT=${REMAINING_COMPONENTS%%,*}
-                REMAINING_COMPONENTS=${REMAINING_COMPONENTS#*,}
-                ;;
-            *)
-                COMPONENT=${REMAINING_COMPONENTS}
-                REMAINING_COMPONENTS=
-                ;;
-        esac
-
-        case "${COMPONENT}" in
-            static) install_library static "${STATIC_LIBRARY}" ;;
-            shared) install_library shared "${SHARED_LIBRARY}" ;;
-        esac
-    done
-
     if [ "${WANT_STATIC}" = true ] || [ "${WANT_SHARED}" = true ]; then
+        install_libraries
+
         LIB_DISPLAY=${LIB_INST}
         if [ "${UPDATE_LATEST}" = true ]; then
             rm -f "${LIB_LATEST}" || exit 1
@@ -325,7 +370,11 @@ main () {
         fi
         echo
         echo "DuckDB C/C++ headers and libraries are installed in ${LIB_DISPLAY}"
-        printf "Compile with -I\"%s\" and -L\"%s\".\n" "${LIB_DISPLAY}" "${LIB_DISPLAY}"
+        if [ "${WANT_SHARED}" = true ]; then
+            printf "Link the shared library with -I\"%s\" -L\"%s\" -lduckdb -Wl,-rpath,\"%s\".\n" "${LIB_DISPLAY}" "${LIB_DISPLAY}" "${LIB_DISPLAY}"
+        else
+            printf "Compile with -I\"%s\" and link %s/libduckdb_static.a explicitly.\n" "${LIB_DISPLAY}" "${LIB_DISPLAY}"
+        fi
     fi
 
     if [ "${WANT_CLI}" = true ]; then
