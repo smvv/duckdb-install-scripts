@@ -51,9 +51,11 @@ The installers use the following versioned locations:
 | Component | Linux/macOS | Windows |
 | --- | --- | --- |
 | CLI | `~/.duckdb/cli/<version>` | `%LOCALAPPDATA%\duckdb\cli\<version>` |
-| Libraries | `~/.duckdb/lib/<version>` | `%LOCALAPPDATA%\duckdb\lib\<version>` |
+| Libraries | `~/.duckdb/lib/<version>/release_<platform>` | `%LOCALAPPDATA%\duckdb\lib\<version>\release_<platform>` |
 
-For latest-stable and staged installs, the Linux/macOS installer updates the relevant `cli/latest` and `lib/latest` symlinks. Pinned versions do not update these symlinks. Windows uses version-specific paths.
+Platform names follow the artifact target with underscores, such as `linux_amd64`, `linux_amd64_musl`, `osx_arm64`, or `windows_amd64`.
+
+For latest-stable and staged installs, the Linux/macOS installer updates the `cli/latest` symlink. Pinned versions do not update this symlink. Libraries always use their versioned build/platform path. Windows uses version-specific paths.
 
 ## Using the libraries from C++
 
@@ -95,7 +97,7 @@ int main() {
 Link the shared library on Linux or macOS with:
 
 ```bash
-DUCKDB_PREFIX="$HOME/.duckdb/lib/latest"
+DUCKDB_PREFIX="$HOME/.duckdb/lib/<version>/release_linux_amd64"
 c++ main.cpp -I"$DUCKDB_PREFIX" -L"$DUCKDB_PREFIX" -lduckdb \
     -Wl,-rpath,"$DUCKDB_PREFIX" -o example
 ```
@@ -103,7 +105,7 @@ c++ main.cpp -I"$DUCKDB_PREFIX" -L"$DUCKDB_PREFIX" -lduckdb \
 Link the static library explicitly so the linker does not select the shared library:
 
 ```bash
-DUCKDB_PREFIX="$HOME/.duckdb/lib/latest"
+DUCKDB_PREFIX="$HOME/.duckdb/lib/<version>/release_linux_amd64"
 c++ main.cpp -I"$DUCKDB_PREFIX" "$DUCKDB_PREFIX/libduckdb_static.a" \
     -pthread -o example
 ```
@@ -115,7 +117,7 @@ On Linux, a static build may additionally need `-ldl`, depending on the release 
 On Windows with MSVC, use `duckdb.lib` for the shared library or `duckdb_static.lib` for the static library:
 
 ```powershell
-$DuckDBPrefix = "$env:LOCALAPPDATA\duckdb\lib\<version>"
+$DuckDBPrefix = "$env:LOCALAPPDATA\duckdb\lib\<version>\release_windows_amd64"
 cl /EHsc main.cpp /I "$DuckDBPrefix" /link "/LIBPATH:$DuckDBPrefix" duckdb.lib
 ```
 

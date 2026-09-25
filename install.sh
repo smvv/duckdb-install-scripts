@@ -112,8 +112,7 @@ main () {
     CLI_INST="${CLI_PREFIX}/${PATH_VER}"
     CLI_LATEST="${CLI_PREFIX}/latest"
     LIB_PREFIX="${HOME}/.duckdb/lib"
-    LIB_INST="${LIB_PREFIX}/${PATH_VER}"
-    LIB_LATEST="${LIB_PREFIX}/latest"
+    LIB_BUILD_TYPE=release
     UPDATE_LATEST=false
     if [ -n "${DUCKDB_STAGED}" ] || [ "${VER}" = "${LATEST_VER}" ]
     then
@@ -121,6 +120,7 @@ main () {
     fi
 
     DIST=
+    LIB_PLATFORM=
     STATIC_LIBRARY=
     SHARED_LIBRARY=
 
@@ -129,14 +129,17 @@ main () {
         if [ "${ARCH}" = "x86_64" ] || [ "${ARCH}" = "amd64" ]
         then
             DIST=linux-amd64
+            LIB_PLATFORM=linux_amd64
         elif [ "${ARCH}" = "aarch64" ] || [ "${ARCH}" = "arm64" ]
         then
             DIST=linux-arm64
+            LIB_PLATFORM=linux_arm64
         fi
 
         if [ -n "${DIST}" ] && ldd --version 2>&1 | grep -qi musl
         then
             DIST="${DIST}-musl"
+            LIB_PLATFORM="${LIB_PLATFORM}_musl"
         fi
         STATIC_LIBRARY=libduckdb_static.a
         SHARED_LIBRARY=libduckdb.so
@@ -145,9 +148,11 @@ main () {
         if [ "${ARCH}" = "x86_64" ]
         then
             DIST=osx-amd64
+            LIB_PLATFORM=osx_amd64
         elif [ "${ARCH}" = "arm64" ]
         then
             DIST=osx-arm64
+            LIB_PLATFORM=osx_arm64
         fi
         STATIC_LIBRARY=libduckdb_static.a
         SHARED_LIBRARY=libduckdb.dylib
@@ -158,6 +163,10 @@ main () {
         echo "Operating system '${OS}' / architecture '${ARCH}' is unsupported." 1>&2
         exit 1
     fi
+
+    LIB_VARIANT="${LIB_BUILD_TYPE}_${LIB_PLATFORM}"
+    LIB_VERSION_PREFIX="${LIB_PREFIX}/${PATH_VER}"
+    LIB_INST="${LIB_VERSION_PREFIX}/${LIB_VARIANT}"
 
     TEMP_DIR=
     cleanup() {
@@ -173,8 +182,8 @@ main () {
 
     make_temp_dir() {
         if [ -z "${TEMP_DIR}" ]; then
-            mkdir -p "${LIB_PREFIX}" || exit 1
-            TEMP_DIR=$(mktemp -d "${LIB_PREFIX}/.duckdb_install.XXXXXX") || exit 1
+            mkdir -p "${LIB_VERSION_PREFIX}" || exit 1
+            TEMP_DIR=$(mktemp -d "${LIB_VERSION_PREFIX}/.duckdb_install.XXXXXX") || exit 1
         fi
     }
 
@@ -362,12 +371,6 @@ main () {
         install_libraries
 
         LIB_DISPLAY=${LIB_INST}
-        if [ "${UPDATE_LATEST}" = true ]; then
-            rm -f "${LIB_LATEST}" || exit 1
-            ln -s "${LIB_INST}" "${LIB_LATEST}" || exit 1
-            LIB_DISPLAY=${LIB_LATEST}
-            echo "Updated symlink ${LIB_LATEST} to ${LIB_INST}"
-        fi
         echo
         echo "DuckDB C/C++ headers and libraries are installed in ${LIB_DISPLAY}"
         if [ "${WANT_SHARED}" = true ]; then

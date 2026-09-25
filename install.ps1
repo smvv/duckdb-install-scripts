@@ -81,7 +81,11 @@ $cli_path = Join-Path $duckdb_root -ChildPath "cli"
 $local_install_dir = Join-Path $cli_path -ChildPath $path_version
 $duckdb_exec = Join-Path $local_install_dir -ChildPath "duckdb.exe"
 $library_path = Join-Path $duckdb_root -ChildPath "lib"
-$library_install_dir = Join-Path $library_path -ChildPath $path_version
+$library_version_path = Join-Path $library_path -ChildPath $path_version
+$library_build_type = "release"
+$library_platform = $duckdb_arch.Replace('-', '_')
+$library_variant = "${library_build_type}_${library_platform}"
+$library_install_dir = Join-Path $library_version_path -ChildPath $library_variant
 
 Write-Host
 Write-Host "*** DuckDB Windows installation script, version ${duckdb_version} ***"
@@ -242,10 +246,10 @@ function InstallLibraries {
         return
     }
 
-    $null = New-Item -Path $library_path -ItemType Directory -Force
+    $null = New-Item -Path $library_version_path -ItemType Directory -Force
     $library_random = [System.IO.Path]::GetRandomFileName()
-    $library_stage = Join-Path $library_path -ChildPath ".${path_version}.${library_random}.tmp"
-    $library_backup = Join-Path $library_path -ChildPath ".${path_version}.${library_random}.previous"
+    $library_stage = Join-Path $library_version_path -ChildPath ".${library_variant}.${library_random}.tmp"
+    $library_backup = Join-Path $library_version_path -ChildPath ".${library_variant}.${library_random}.previous"
 
     try {
         $null = New-Item -Path $library_stage -ItemType Directory

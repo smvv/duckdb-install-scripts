@@ -51,8 +51,15 @@ jobs:
         DUCKDB_INSTALL=static,shared DUCKDB_STAGED=31adc8b766 sh install.sh
         test ! -e "$HOME/.duckdb/cli"
 
-        LIB_INST="$HOME/.duckdb/lib/2.0.0-alpha42839"
-        test "$(readlink "$HOME/.duckdb/lib/latest")" = "$LIB_INST"
+        case "$(uname -s)-$(uname -m)" in
+          Linux-x86_64|Linux-amd64) LIB_VARIANT=release_linux_amd64 ;;
+          Linux-aarch64|Linux-arm64) LIB_VARIANT=release_linux_arm64 ;;
+          Darwin-x86_64) LIB_VARIANT=release_osx_amd64 ;;
+          Darwin-arm64) LIB_VARIANT=release_osx_arm64 ;;
+          *) exit 1 ;;
+        esac
+        LIB_INST="$HOME/.duckdb/lib/2.0.0-alpha42839/$LIB_VARIANT"
+        test ! -e "$HOME/.duckdb/lib/latest"
 
         test -s "$LIB_INST/duckdb.h"
         test -s "$LIB_INST/libduckdb_static.a"
@@ -110,7 +117,7 @@ jobs:
           throw "A library-only install unexpectedly created the CLI directory."
         }
 
-        $lib = "$env:LOCALAPPDATA\duckdb\lib\$version"
+        $lib = "$env:LOCALAPPDATA\duckdb\lib\$version\release_windows_amd64"
         foreach ($file in @("duckdb.h", "duckdb_static.lib", "duckdb.dll", "duckdb.lib")) {
           if (-not (Test-Path "$lib\$file" -PathType Leaf)) {
             throw "Missing $lib\$file"
