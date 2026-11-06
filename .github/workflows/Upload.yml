@@ -8,7 +8,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-slim, macos-latest]
-        version: [stable, staged, pinned]
+        version: [stable, 2.1-alpha, staged, pinned]
     runs-on: ${{ matrix.os }}
     name: Test ${{ matrix.version }} ${{ matrix.os }}
     steps:
@@ -25,10 +25,19 @@ jobs:
         ~/.duckdb/cli/latest/duckdb -c "select 42"
 
     - name: Test stable Unix install
-      if: matrix.version != 'pinned'
+      if: matrix.version == 'stable'
       shell: sh
       run: |
         cat install.sh | sh
+        ~/.duckdb/cli/latest/duckdb -c "select 42"
+
+    - name: Test release-line alpha Unix install
+      if: matrix.version == '2.1-alpha'
+      shell: sh
+      run: |
+        DUCKDB_VERSION=2.1-alpha sh install.sh
+        ALPHA_VERSION=$(~/.duckdb/cli/latest/duckdb -noheader -init /dev/null -csv -batch -s "SELECT version()")
+        printf '%s\n' "$ALPHA_VERSION" | grep -Eq '^v2\.1\.[0-9]+-alpha[0-9]+$'
         ~/.duckdb/cli/latest/duckdb -c "select 42"
 
     - name: Test pinned Unix install
@@ -72,7 +81,7 @@ jobs:
   test-windows:
     strategy:
       matrix:
-        version: [stable, staged, pinned]
+        version: [stable, 2.1-alpha, staged, pinned]
     runs-on: windows-latest
     name: Test ${{ matrix.version }} windows-latest
     steps:
@@ -94,6 +103,20 @@ jobs:
         $env:DUCKDB_STAGED = "31adc8b766"
         ./install.ps1
         & "$env:LOCALAPPDATA\duckdb\cli\2.0.0-alpha42839\duckdb.exe" -c "select 42"
+
+    - name: Test release-line alpha Windows install
+      if: matrix.version == '2.1-alpha'
+      shell: pwsh
+      run: |
+        $env:DUCKDB_VERSION = "2.1-alpha"
+        ./install.ps1
+        $sh = New-Object -ComObject WScript.Shell
+        $target = $sh.CreateShortcut("$Home\Desktop\DuckDB.lnk").TargetPath
+        $alpha_version = (& $target -noheader -init NUL -csv -batch -s "SELECT version()").Trim()
+        if ($alpha_version -notmatch '^v2\.1\.\d+-alpha\d+$') {
+          throw "Expected a v2.1 alpha version, got ${alpha_version}"
+        }
+        & $target -c "select 42"
 
     - name: Test pinned Windows install
       if: matrix.version == 'pinned'
